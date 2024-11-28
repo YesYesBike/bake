@@ -6,10 +6,11 @@ use Data::Dumper;
 
 sub rmcom {
 	$_ = shift;
-	s/\s*#.*$//;
+	s/\s+#.*$//;
 	return $_;
 }
 
+#TODO: multiline...
 #TODO: incude
 #sub init {
 #}
@@ -41,7 +42,7 @@ my $w = qr/[a-zA-Z0-9_]/;
 my $env_pat;
 $env_pat = qr/
 	\$\{
-		($w+)
+		(\#?$w+)
 		(:
 			(?:
 				(??{ $env_pat })
@@ -57,7 +58,7 @@ $env_pat_num = qr/
 		([0-9]+)
 		(:
 			(?:
-				(??{ $env_pat_num })
+				(??{ $env_pat })
 				|
 				[^}]*
 			)
@@ -107,7 +108,7 @@ read_bake($bkfile_cur);
 
 %read_list or die "No Bakefile available\n";
 
-$def_cmd = $def_cmd_def // $def_cmd_norm // "";
+$def_cmd = $def_cmd_def || $def_cmd_norm || "";
 $def_cmd or die "No command in Bakefile\n";
 
 for (\%cmd_list_norm, \%cmd_list_def) {
@@ -137,9 +138,6 @@ my $rv;
 
 #TODO: @{} + ${} <- whole routine iterate <- Completed??
 #TODO: arg @{asdf}{first, second, ...} <- Completed?
-#while ($rv =~ /\@\{($w+)\}/g) {
-#while ($rv =~ /\@\{($w+)\}(?:\{([^\}]*)\})?/pg) {    #FIXME -> FIXED?
-#while ($rv =~ /\@\{($w+)\}(?:\{(sjkdflsj)\})?/pg) {    #FIXME -> FIXED?
 while ($rv =~ /\@\{($w+)\}(?:\{((?:(?:$env_pat|[^,]*)\s*,?)+)\})?/pg) {
 	my %env_tmp;
 	my $rv_1st = $1;
@@ -157,9 +155,9 @@ while ($rv =~ /\@\{($w+)\}(?:\{((?:(?:$env_pat|[^,]*)\s*,?)+)\})?/pg) {
 		$env_tmp{$i++} = $_ for @arg_cmd;
 	}
 
-
+	#print "DEBUGGING\n";
 	while ($res =~ /$env_pat_num/pg) {
-		(my $rep = $env_tmp{$1} // $2) or die "$rv_1st: Need more arg(s)\n";
+		(my $rep = $env_tmp{$1} || $2) or die "$rv_1st: Need more arg(s)#1\n";
 		(my $sev = ${^MATCH}) =~ s/([\$\{\}])/\\$1/g;
 		$rep =~ s/^://;
 		$res =~ s/$sev/$rep/;
@@ -168,7 +166,6 @@ while ($rv =~ /\@\{($w+)\}(?:\{((?:(?:$env_pat|[^,]*)\s*,?)+)\})?/pg) {
 	$rv =~ s/$sav/$res/;
 }
 
-#print "DEBUGGING\n";
 
 #TODO: fzf
 #TODO: Nested env: ${1:${HOME}} -> Completed???
@@ -176,10 +173,13 @@ while ($rv =~ /\@\{($w+)\}(?:\{((?:(?:$env_pat|[^,]*)\s*,?)+)\})?/pg) {
 
 
 while ($rv =~ /$env_pat/pg) {
-	(my $rep = $env_list{$1} // $2) or die "$lv: Need more arg(s)\n";
-	(my $sav = ${^MATCH}) =~ s/([\$\{\}])/\\$1/g;
+	my ($sav, $one, $two) = (${^MATCH}, $1, $2);
+	$one =~ s/^#//;
+	$sav =~ s/([\$\{\}])/\\$1/g;
+
+	(my $rep = $env_list{$one} || $two) or die "$lv: Need more arg(s)#2\n";
 	$rep =~ s/^://;
 	$rv =~ s/$sav/$rep/;
 }
 
-exec $rv;				#DBG
+exec $rv;
