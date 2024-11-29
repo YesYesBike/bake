@@ -6,6 +6,7 @@ use Data::Dumper;
 
 sub rmcom {
 	$_ = shift;
+	#TODO: s/\s*#.*$//;
 	s/\s+#.*$//;
 	return $_;
 }
@@ -41,7 +42,7 @@ my $w = qr/[a-zA-Z0-9_]/;
 
 my $env_pat;
 $env_pat = qr/
-	\$\{
+	(\$\{
 		(\#?$w+)
 		(:
 			(?:
@@ -50,7 +51,7 @@ $env_pat = qr/
 				[^}]*
 			)
 		)?
-	\}
+	\})
 /x;
 my $env_pat_num;			#TODO: fix duplication
 $env_pat_num = qr/
@@ -87,13 +88,13 @@ sub read_bake {
 			$def_cmd_ref = \$def_cmd_norm;
 		}
 
-		if (/^\s*([^:]+)\s*:\s*(.*)\s*$/) {
+		if (/^\s*($w+)\s*:\s*(.*)\s*$/) {
 			$$def_cmd_ref = $1 unless %$cmd_list_ref;
 			$$cmd_list_ref{$1} = rmcom($2);
 		} elsif (/^\s*($w+)\s*=\s*(.*)\s*$/) {
 			$$env_list_ref{$1} = rmcom($2);
-			#} elsif (/^include\s*(.*)/) {
-			#	push @inc_list, rmcom($1);
+		#} elsif (/^include\s*(.*)/) {
+		#	push @inc_list, rmcom($1);
 		} else {
 			die "<$_>\nSyntax error at $file, line $line\n";
 		}
@@ -138,11 +139,10 @@ my $rv;
 
 #TODO: @{} + ${} <- whole routine iterate <- Completed??
 #TODO: arg @{asdf}{first, second, ...} <- Completed?
-while ($rv =~ /\@\{($w+)\}(?:\{((?:(?:$env_pat|[^,]*)\s*,?)+)\})?/pg) {
+while ($rv =~ /(?<match>\@\{($w+)\}(?:\{((?:(?:$env_pat|[^,]*)\s*,?)+)\})?)/pg) {
 	my %env_tmp;
-	my $rv_1st = $1;
-	my $rv_2nd = $2;
-	my ($sav, $res) = (${^MATCH}, ${^MATCH});
+	my ($sav, $res) = ($1, $1);
+	my ($rv_1st, $rv_2nd) = ($2, $3);
 	$sav =~ s/([\$\{\}])/\\$1/g;
 
 	$cmd_list{$rv_1st} or die "$rv_1st: command not defined\n";
@@ -155,7 +155,6 @@ while ($rv =~ /\@\{($w+)\}(?:\{((?:(?:$env_pat|[^,]*)\s*,?)+)\})?/pg) {
 		$env_tmp{$i++} = $_ for @arg_cmd;
 	}
 
-	#print "DEBUGGING\n";
 	while ($res =~ /$env_pat_num/pg) {
 		(my $rep = $env_tmp{$1} || $2) or die "$rv_1st: Need more arg(s)#1\n";
 		(my $sev = ${^MATCH}) =~ s/([\$\{\}])/\\$1/g;
@@ -168,12 +167,12 @@ while ($rv =~ /\@\{($w+)\}(?:\{((?:(?:$env_pat|[^,]*)\s*,?)+)\})?/pg) {
 
 
 #TODO: fzf
-#TODO: Nested env: ${1:${HOME}} -> Completed???
-#TODO: More Options... ${${asdf}?" * ":asdf_default}
+#TODO: More Options... ${${asdf}?" * ":asdf_default} -> Not planned!
 
 
+#TODO: remove from 'foo: @{bar}{${#1:something}}'
 while ($rv =~ /$env_pat/pg) {
-	my ($sav, $one, $two) = (${^MATCH}, $1, $2);
+	my ($sav, $one, $two) = ($1, $2, $3);
 	$one =~ s/^#//;
 	$sav =~ s/([\$\{\}])/\\$1/g;
 
